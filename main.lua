@@ -14,7 +14,7 @@ local bunnyHopEnabled = false
 local aimTarget = "Head" -- Можливі значення: "Head", "Torso", "Feet"
 local teammateColor = Color3.fromRGB(0, 255, 0) -- Початковий колір для тиммейтів
 local enemyColor = Color3.fromRGB(255, 0, 0) -- Початковий колір для ворогів
-local debugMode = true -- Увімкнення відладочного виведення
+local debugMode = false -- Увімкнення відладочного виведення
 local currentTab = "Visuals" -- Поточна вкладка
 
 -- Функція для створення ESP (підсвітки або тексту)
