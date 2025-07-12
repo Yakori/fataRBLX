@@ -14,8 +14,12 @@ local bunnyHopEnabled = false
 local aimTarget = "Head" -- Можливі значення: "Head", "Torso", "Feet"
 local teammateColor = Color3.fromRGB(0, 255, 0) -- Початковий колір для тиммейтів
 local enemyColor = Color3.fromRGB(255, 0, 0) -- Початковий колір для ворогів
-local debugMode = true -- Увімкнення відладочного виведення
+local debugMode = false -- Вимкнене відладочне виведення
 local currentTab = "Visuals" -- Поточна вкладка
+local aimbotKey = Enum.UserInputType.MouseButton2 -- Клавіша для аімботу
+local menuKey = Enum.KeyCode.Insert -- Клавіша для меню
+local smoothness = 0.15 -- Плавність аімботу (менше = плавніше)
+local headOffset = Vector3.new(0, 0.3, 0) -- Зсув вище голови
 
 -- Функція для створення ESP (підсвітки або тексту)
 local function createESP(player)
@@ -128,37 +132,53 @@ local function removeESP(player)
     end
 end
 
--- Аимбот
+-- Покращений аімбот
 local function aimbot()
-    if not aimbotEnabled or not UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) or not LocalPlayer.Character then return end
+    if not aimbotEnabled or not UserInputService:IsMouseButtonPressed(aimbotKey) or not LocalPlayer.Character then return end
+    
     local target = nil
     local shortestDistance = math.huge
+    local maxDistance = 1000 -- Максимальна дистанція для аімботу
+    local fov = 120 -- Поле зору
+    
     for _, player in ipairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character then
             local isTeammate = LocalPlayer.Team and player.Team and LocalPlayer.Team == player.Team
             if not isTeammate then
                 local targetPart = player.Character:FindFirstChild(aimTarget)
                 if targetPart then
-                    local screenPoint = Camera:WorldToScreenPoint(targetPart.Position)
-                    local distance = (Vector2.new(Mouse.X, Mouse.Y) - Vector2.new(screenPoint.X, screenPoint.Y)).Magnitude
-                    if distance < shortestDistance then
-                        shortestDistance = distance
-                        target = targetPart
+                    local screenPoint = Camera:WorldToViewportPoint(targetPart.Position)
+                    if screenPoint.Z > 0 then -- Перевірка, чи об'єкт перед камерою
+                        local distance = (Vector2.new(Mouse.X, Mouse.Y) - Vector2.new(screenPoint.X, screenPoint.Y)).Magnitude
+                        local realDistance = (Camera.CFrame.Position - targetPart.Position).Magnitude
+                        
+                        -- Перевірка FOV та дистанції
+                        if distance < shortestDistance and distance < fov and realDistance < maxDistance then
+                            shortestDistance = distance
+                            target = targetPart
+                        end
                     end
                 end
             end
         end
     end
+    
     if target then
         local targetPosition = target.Position
-        if aimTarget == "Torso" then
-            targetPosition = targetPosition - Vector3.new(0, 1, 0) -- Зсув нижче для тулуба
+        
+        -- Додаємо зсув залежно від цілі
+        if aimTarget == "Head" then
+            targetPosition = targetPosition + headOffset -- Зсув вище голови
+        elseif aimTarget == "Torso" then
+            targetPosition = targetPosition + Vector3.new(0, 0.5, 0) -- Зсув для тулуба
         elseif aimTarget == "Feet" then
-            targetPosition = targetPosition - Vector3.new(0, 3, 0) -- Зсув нижче для ніг
+            targetPosition = targetPosition - Vector3.new(0, 1.5, 0) -- Зсув для ніг
         end
+        
+        -- Плавний аім
         local currentCFrame = Camera.CFrame
-        local newCFrame = CFrame.new(currentCFrame.Position, Vector3.new(targetPosition.X, targetPosition.Y + 1, targetPosition.Z))
-        Camera.CFrame = currentCFrame:Lerp(newCFrame, 0.1) -- Плавний перехід
+        local newCFrame = CFrame.new(currentCFrame.Position, targetPosition)
+        Camera.CFrame = currentCFrame:Lerp(newCFrame, smoothness)
     end
 end
 
@@ -173,7 +193,7 @@ local function bunnyHop()
     end
 end
 
--- Створюємо GUI для меню
+-- Покращене меню
 local function createMenu()
     local screenGui = Instance.new("ScreenGui")
     screenGui.Name = "CustomMenu"
@@ -181,25 +201,63 @@ local function createMenu()
     screenGui.ResetOnSpawn = false
 
     local frame = Instance.new("Frame")
-    frame.Size = UDim2.new(0, 250, 0, 400)
-    frame.Position = UDim2.new(0.5, -125, 0.1, 0)
-    frame.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
-    frame.BorderSizePixel = 2
-    frame.BorderColor3 = Color3.fromRGB(100, 50, 150)
+    frame.Size = UDim2.new(0, 300, 0, 350)
+    frame.Position = UDim2.new(0.5, -150, 0.5, -175)
+    frame.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+    frame.BorderSizePixel = 0
+    frame.Active = true
+    frame.Draggable = true
     frame.Parent = screenGui
-
+    
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 6)
+    corner.Parent = frame
+    
+    local topBar = Instance.new("Frame")
+    topBar.Size = UDim2.new(1, 0, 0, 30)
+    topBar.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
+    topBar.BorderSizePixel = 0
+    topBar.Parent = frame
+    
+    local topCorner = Instance.new("UICorner")
+    topCorner.CornerRadius = UDim.new(0, 6)
+    topCorner.Parent = topBar
+    
+    local title = Instance.new("TextLabel")
+    title.Size = UDim2.new(0, 200, 1, 0)
+    title.Position = UDim2.new(0.5, -100, 0, 0)
+    title.BackgroundTransparency = 1
+    title.Text = "Custom Cheat Menu"
+    title.TextColor3 = Color3.fromRGB(255, 255, 255)
+    title.TextSize = 18
+    title.Font = Enum.Font.GothamBold
+    title.Parent = topBar
+    
+    local closeButton = Instance.new("TextButton")
+    closeButton.Size = UDim2.new(0, 30, 1, 0)
+    closeButton.Position = UDim2.new(1, -30, 0, 0)
+    closeButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+    closeButton.Text = "X"
+    closeButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    closeButton.TextSize = 14
+    closeButton.Font = Enum.Font.GothamBold
+    closeButton.Parent = topBar
+    closeButton.MouseButton1Click:Connect(function()
+        frame.Visible = false
+    end)
+    
     local tabFrame = Instance.new("Frame")
-    tabFrame.Size = UDim2.new(1, 0, 0, 40)
-    tabFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
-    tabFrame.BorderSizePixel = 0
+    tabFrame.Size = UDim2.new(1, -20, 0, 30)
+    tabFrame.Position = UDim2.new(0, 10, 0, 35)
+    tabFrame.BackgroundTransparency = 1
     tabFrame.Parent = frame
-
+    
     local contentFrame = Instance.new("Frame")
-    contentFrame.Size = UDim2.new(1, 0, 1, -40)
-    contentFrame.Position = UDim2.new(0, 0, 0, 40)
+    contentFrame.Size = UDim2.new(1, -20, 1, -75)
+    contentFrame.Position = UDim2.new(0, 10, 0, 70)
     contentFrame.BackgroundTransparency = 1
     contentFrame.Parent = frame
-
+    
     local tabs = {
         Visuals = Instance.new("TextButton"),
         Aimbot = Instance.new("TextButton"),
@@ -207,27 +265,34 @@ local function createMenu()
     }
 
     for name, tab in pairs(tabs) do
-        tab.Size = UDim2.new(0.33, 0, 1, 0)
-        tab.BackgroundColor3 = Color3.fromRGB(50, 50, 70)
+        tab.Size = UDim2.new(0.33, -5, 1, 0)
+        tab.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
         tab.Text = name
         tab.TextColor3 = Color3.fromRGB(255, 255, 255)
         tab.TextSize = 14
-        tab.Font = Enum.Font.SourceSansBold
+        tab.Font = Enum.Font.Gotham
         tab.BorderSizePixel = 0
         tab.Parent = tabFrame
+        
+        local tabCorner = Instance.new("UICorner")
+        tabCorner.CornerRadius = UDim.new(0, 6)
+        tabCorner.Parent = tab
+        
         tab.MouseButton1Click:Connect(function()
             currentTab = name
-            for _, t in pairs(tabs) do t.BackgroundColor3 = Color3.fromRGB(50, 50, 70) end
-            tab.BackgroundColor3 = Color3.fromRGB(70, 70, 90)
+            for _, t in pairs(tabs) do 
+                t.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
+            end
+            tab.BackgroundColor3 = Color3.fromRGB(80, 80, 90)
             for _, child in pairs(contentFrame:GetChildren()) do child.Visible = false end
             if contentFrame:FindFirstChild(name) then contentFrame:FindFirstChild(name).Visible = true end
         end)
     end
-
+    
     tabs.Visuals.Position = UDim2.new(0, 0, 0, 0)
     tabs.Aimbot.Position = UDim2.new(0.33, 0, 0, 0)
     tabs.Movement.Position = UDim2.new(0.66, 0, 0, 0)
-    tabs.Visuals.BackgroundColor3 = Color3.fromRGB(70, 70, 90)
+    tabs.Visuals.BackgroundColor3 = Color3.fromRGB(80, 80, 90)
 
     -- Вкладка Visuals
     local visualsFrame = Instance.new("Frame")
@@ -236,62 +301,95 @@ local function createMenu()
     visualsFrame.BackgroundTransparency = 1
     visualsFrame.Visible = true
     visualsFrame.Parent = contentFrame
-
-    local toggleHighlight = Instance.new("TextButton")
-    toggleHighlight.Size = UDim2.new(0.8, 0, 0.15, 0)
-    toggleHighlight.Position = UDim2.new(0.1, 0, 0.1, 0)
-    toggleHighlight.Text = highlightsEnabled and "Вимкнути підсвітку" or "Увімкнути підсвітку"
-    toggleHighlight.TextColor3 = Color3.fromRGB(255, 255, 255)
-    toggleHighlight.BackgroundColor3 = Color3.fromRGB(50, 50, 70)
-    toggleHighlight.BorderColor3 = Color3.fromRGB(150, 50, 200)
-    toggleHighlight.TextSize = 12
-    toggleHighlight.Font = Enum.Font.SourceSansBold
-    toggleHighlight.Parent = visualsFrame
-    toggleHighlight.MouseButton1Click:Connect(function()
-        highlightsEnabled = not highlightsEnabled
-        toggleHighlight.Text = highlightsEnabled and "Вимкнути підсвітку" or "Увімкнути підсвітку"
+    
+    local function createToggleButton(name, yPos, state, callback)
+        local button = Instance.new("TextButton")
+        button.Size = UDim2.new(1, 0, 0, 30)
+        button.Position = UDim2.new(0, 0, 0, yPos)
+        button.BackgroundColor3 = state and Color3.fromRGB(50, 150, 50) or Color3.fromRGB(150, 50, 50)
+        button.Text = name .. ": " .. (state and "ON" or "OFF")
+        button.TextColor3 = Color3.fromRGB(255, 255, 255)
+        button.TextSize = 14
+        button.Font = Enum.Font.Gotham
+        button.Parent = visualsFrame
+        
+        local corner = Instance.new("UICorner")
+        corner.CornerRadius = UDim.new(0, 6)
+        corner.Parent = button
+        
+        button.MouseButton1Click:Connect(function()
+            state = not state
+            button.BackgroundColor3 = state and Color3.fromRGB(50, 150, 50) or Color3.fromRGB(150, 50, 50)
+            button.Text = name .. ": " .. (state and "ON" or "OFF")
+            callback(state)
+        end)
+        
+        return button
+    end
+    
+    local function createColorPicker(name, yPos, currentColor, callback)
+        local frame = Instance.new("Frame")
+        frame.Size = UDim2.new(1, 0, 0, 60)
+        frame.Position = UDim2.new(0, 0, 0, yPos)
+        frame.BackgroundTransparency = 1
+        frame.Parent = visualsFrame
+        
+        local label = Instance.new("TextLabel")
+        label.Size = UDim2.new(1, 0, 0, 20)
+        label.Position = UDim2.new(0, 0, 0, 0)
+        label.BackgroundTransparency = 1
+        label.Text = name
+        label.TextColor3 = Color3.fromRGB(255, 255, 255)
+        label.TextSize = 14
+        label.Font = Enum.Font.Gotham
+        label.TextXAlignment = Enum.TextXAlignment.Left
+        label.Parent = frame
+        
+        local colorBox = Instance.new("TextButton")
+        colorBox.Size = UDim2.new(0, 50, 0, 30)
+        colorBox.Position = UDim2.new(0, 0, 0, 25)
+        colorBox.BackgroundColor3 = currentColor
+        colorBox.Text = ""
+        colorBox.Parent = frame
+        
+        local corner = Instance.new("UICorner")
+        corner.CornerRadius = UDim.new(0, 6)
+        corner.Parent = colorBox
+        
+        local colors = {
+            Color3.fromRGB(255, 0, 0),   -- Red
+            Color3.fromRGB(0, 255, 0),   -- Green
+            Color3.fromRGB(0, 0, 255),   -- Blue
+            Color3.fromRGB(255, 255, 0), -- Yellow
+            Color3.fromRGB(255, 0, 255), -- Purple
+            Color3.fromRGB(0, 255, 255), -- Cyan
+            Color3.fromRGB(255, 255, 255) -- White
+        }
+        
+        colorBox.MouseButton1Click:Connect(function()
+            for i, color in ipairs(colors) do
+                if currentColor == color then
+                    currentColor = colors[(i % #colors) + 1]
+                    break
+                end
+            end
+            colorBox.BackgroundColor3 = currentColor
+            callback(currentColor)
+        end)
+    end
+    
+    -- Тумблери для Visuals
+    local highlightToggle = createToggleButton("ESP Highlight", 0, highlightsEnabled, function(state)
+        highlightsEnabled = state
         for _, player in ipairs(Players:GetPlayers()) do
             removeESP(player)
             if highlightsEnabled then createESP(player) end
         end
     end)
-
-    local teammateColorLabel = Instance.new("TextLabel")
-    teammateColorLabel.Size = UDim2.new(0.8, 0, 0.1, 0)
-    teammateColorLabel.Position = UDim2.new(0.1, 0, 0.3, 0)
-    teammateColorLabel.BackgroundTransparency = 1
-    teammateColorLabel.Text = "Колір тиммейтів: " .. teammateColor:ToHex()
-    teammateColorLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-    teammateColorLabel.TextSize = 12
-    teammateColorLabel.Font = Enum.Font.SourceSansBold
-    teammateColorLabel.Parent = visualsFrame
-
-    local teammateColorButton = Instance.new("TextButton")
-    teammateColorButton.Size = UDim2.new(0.8, 0, 0.1, 0)
-    teammateColorButton.Position = UDim2.new(0.1, 0, 0.4, 0)
-    teammateColorButton.Text = "Змінити колір тиммейтів"
-    teammateColorButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-    teammateColorButton.BackgroundColor3 = Color3.fromRGB(50, 50, 70)
-    teammateColorButton.BorderColor3 = Color3.fromRGB(150, 50, 200)
-    teammateColorButton.TextSize = 12
-    teammateColorButton.Font = Enum.Font.SourceSansBold
-    teammateColorButton.Parent = visualsFrame
-    teammateColorButton.MouseButton1Click:Connect(function()
-        local colors = {
-            Color3.fromRGB(0, 255, 0), -- Green
-            Color3.fromRGB(0, 0, 255), -- Blue
-            Color3.fromRGB(255, 255, 0), -- Yellow
-            Color3.fromRGB(255, 0, 255), -- Purple
-            Color3.fromRGB(255, 255, 255) -- White
-        }
-        for i, color in ipairs(colors) do
-            if teammateColor == color then
-                teammateColor = colors[(i % #colors) + 1]
-                break
-            end
-        end
-        if teammateColor == nil then teammateColor = colors[1] end
-        teammateColorLabel.Text = "Колір тиммейтів: " .. teammateColor:ToHex()
+    
+    -- Колірні пікери
+    createColorPicker("Teammate Color", 40, teammateColor, function(color)
+        teammateColor = color
         for _, player in ipairs(Players:GetPlayers()) do
             if player.Character then
                 local highlight = player.Character:FindFirstChild("PlayerHighlight")
@@ -301,43 +399,9 @@ local function createMenu()
             end
         end
     end)
-
-    local enemyColorLabel = Instance.new("TextLabel")
-    enemyColorLabel.Size = UDim2.new(0.8, 0, 0.1, 0)
-    enemyColorLabel.Position = UDim2.new(0.1, 0, 0.55, 0)
-    enemyColorLabel.BackgroundTransparency = 1
-    enemyColorLabel.Text = "Колір ворогів: " .. enemyColor:ToHex()
-    enemyColorLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-    enemyColorLabel.TextSize = 12
-    enemyColorLabel.Font = Enum.Font.SourceSansBold
-    enemyColorLabel.Parent = visualsFrame
-
-    local enemyColorButton = Instance.new("TextButton")
-    enemyColorButton.Size = UDim2.new(0.8, 0, 0.1, 0)
-    enemyColorButton.Position = UDim2.new(0.1, 0, 0.65, 0)
-    enemyColorButton.Text = "Змінити колір ворогів"
-    enemyColorButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-    enemyColorButton.BackgroundColor3 = Color3.fromRGB(50, 50, 70)
-    enemyColorButton.BorderColor3 = Color3.fromRGB(150, 50, 200)
-    enemyColorButton.TextSize = 12
-    enemyColorButton.Font = Enum.Font.SourceSansBold
-    enemyColorButton.Parent = visualsFrame
-    enemyColorButton.MouseButton1Click:Connect(function()
-        local colors = {
-            Color3.fromRGB(255, 0, 0), -- Red
-            Color3.fromRGB(0, 0, 255), -- Blue
-            Color3.fromRGB(255, 255, 0), -- Yellow
-            Color3.fromRGB(255, 0, 255), -- Purple
-            Color3.fromRGB(255, 255, 255) -- White
-        }
-        for i, color in ipairs(colors) do
-            if enemyColor == color then
-                enemyColor = colors[(i % #colors) + 1]
-                break
-            end
-        end
-        if enemyColor == nil then enemyColor = colors[1] end
-        enemyColorLabel.Text = "Колір ворогів: " .. enemyColor:ToHex()
+    
+    createColorPicker("Enemy Color", 110, enemyColor, function(color)
+        enemyColor = color
         for _, player in ipairs(Players:GetPlayers()) do
             if player.Character then
                 local highlight = player.Character:FindFirstChild("PlayerHighlight")
@@ -355,47 +419,95 @@ local function createMenu()
     aimbotFrame.BackgroundTransparency = 1
     aimbotFrame.Visible = false
     aimbotFrame.Parent = contentFrame
-
-    local toggleAimbot = Instance.new("TextButton")
-    toggleAimbot.Size = UDim2.new(0.8, 0, 0.2, 0)
-    toggleAimbot.Position = UDim2.new(0.1, 0, 0.1, 0)
-    toggleAimbot.Text = aimbotEnabled and "Вимкнути аімбот" or "Увімкнути аімбот"
-    toggleAimbot.TextColor3 = Color3.fromRGB(255, 255, 255)
-    toggleAimbot.BackgroundColor3 = Color3.fromRGB(50, 50, 70)
-    toggleAimbot.BorderColor3 = Color3.fromRGB(150, 50, 200)
-    toggleAimbot.TextSize = 12
-    toggleAimbot.Font = Enum.Font.SourceSansBold
-    toggleAimbot.Parent = aimbotFrame
-    toggleAimbot.MouseButton1Click:Connect(function()
-        aimbotEnabled = not aimbotEnabled
-        toggleAimbot.Text = aimbotEnabled and "Вимкнути аімбот" or "Увімкнути аімбот"
+    
+    -- Тумблер для Aimbot
+    local aimbotToggle = createToggleButton("Aimbot", 0, aimbotEnabled, function(state)
+        aimbotEnabled = state
     end)
-
-    local aimTargetLabel = Instance.new("TextLabel")
-    aimTargetLabel.Size = UDim2.new(0.8, 0, 0.1, 0)
-    aimTargetLabel.Position = UDim2.new(0.1, 0, 0.4, 0)
-    aimTargetLabel.BackgroundTransparency = 1
-    aimTargetLabel.Text = "Ціль аімботу: " .. aimTarget
-    aimTargetLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-    aimTargetLabel.TextSize = 12
-    aimTargetLabel.Font = Enum.Font.SourceSansBold
-    aimTargetLabel.Parent = aimbotFrame
-
-    local aimTargetButton = Instance.new("TextButton")
-    aimTargetButton.Size = UDim2.new(0.8, 0, 0.1, 0)
-    aimTargetButton.Position = UDim2.new(0.1, 0, 0.5, 0)
-    aimTargetButton.Text = "Змінити ціль"
-    aimTargetButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-    aimTargetButton.BackgroundColor3 = Color3.fromRGB(50, 50, 70)
-    aimTargetButton.BorderColor3 = Color3.fromRGB(150, 50, 200)
-    aimTargetButton.TextSize = 12
-    aimTargetButton.Font = Enum.Font.SourceSansBold
-    aimTargetButton.Parent = aimbotFrame
-    aimTargetButton.MouseButton1Click:Connect(function()
+    
+    -- Вибір цілі
+    local targetFrame = Instance.new("Frame")
+    targetFrame.Size = UDim2.new(1, 0, 0, 60)
+    targetFrame.Position = UDim2.new(0, 0, 0, 40)
+    targetFrame.BackgroundTransparency = 1
+    targetFrame.Parent = aimbotFrame
+    
+    local targetLabel = Instance.new("TextLabel")
+    targetLabel.Size = UDim2.new(1, 0, 0, 20)
+    targetLabel.Position = UDim2.new(0, 0, 0, 0)
+    targetLabel.BackgroundTransparency = 1
+    targetLabel.Text = "Aimbot Target: " .. aimTarget
+    targetLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    targetLabel.TextSize = 14
+    targetLabel.Font = Enum.Font.Gotham
+    targetLabel.TextXAlignment = Enum.TextXAlignment.Left
+    targetLabel.Parent = targetFrame
+    
+    local targetButton = Instance.new("TextButton")
+    targetButton.Size = UDim2.new(0, 80, 0, 30)
+    targetButton.Position = UDim2.new(0, 0, 0, 25)
+    targetButton.BackgroundColor3 = Color3.fromRGB(80, 80, 90)
+    targetButton.Text = "Change"
+    targetButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    targetButton.TextSize = 14
+    targetButton.Font = Enum.Font.Gotham
+    targetButton.Parent = targetFrame
+    
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 6)
+    corner.Parent = targetButton
+    
+    targetButton.MouseButton1Click:Connect(function()
         if aimTarget == "Head" then aimTarget = "Torso"
         elseif aimTarget == "Torso" then aimTarget = "Feet"
         else aimTarget = "Head" end
-        aimTargetLabel.Text = "Ціль аімботу: " .. aimTarget
+        targetLabel.Text = "Aimbot Target: " .. aimTarget
+    end)
+    
+    -- Налаштування плавності
+    local smoothFrame = Instance.new("Frame")
+    smoothFrame.Size = UDim2.new(1, 0, 0, 60)
+    smoothFrame.Position = UDim2.new(0, 0, 0, 110)
+    smoothFrame.BackgroundTransparency = 1
+    smoothFrame.Parent = aimbotFrame
+    
+    local smoothLabel = Instance.new("TextLabel")
+    smoothLabel.Size = UDim2.new(1, 0, 0, 20)
+    smoothLabel.Position = UDim2.new(0, 0, 0, 0)
+    smoothLabel.BackgroundTransparency = 1
+    smoothLabel.Text = "Smoothness: " .. string.format("%.2f", smoothness)
+    smoothLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    smoothLabel.TextSize = 14
+    smoothLabel.Font = Enum.Font.Gotham
+    smoothLabel.TextXAlignment = Enum.TextXAlignment.Left
+    smoothLabel.Parent = smoothFrame
+    
+    local smoothSlider = Instance.new("TextButton")
+    smoothSlider.Size = UDim2.new(1, 0, 0, 30)
+    smoothSlider.Position = UDim2.new(0, 0, 0, 25)
+    smoothSlider.BackgroundColor3 = Color3.fromRGB(80, 80, 90)
+    smoothSlider.Text = ""
+    smoothSlider.Parent = smoothFrame
+    
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 6)
+    corner.Parent = smoothSlider
+    
+    local fill = Instance.new("Frame")
+    fill.Size = UDim2.new(smoothness / 0.3, 0, 1, 0)
+    fill.BackgroundColor3 = Color3.fromRGB(100, 200, 100)
+    fill.BorderSizePixel = 0
+    fill.Parent = smoothSlider
+    
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 6)
+    corner.Parent = fill
+    
+    smoothSlider.MouseButton1Down:Connect(function(x)
+        local percent = math.clamp((x - smoothSlider.AbsolutePosition.X) / smoothSlider.AbsoluteSize.X, 0, 1)
+        smoothness = math.floor(percent * 0.3 * 100) / 100
+        fill.Size = UDim2.new(smoothness / 0.3, 0, 1, 0)
+        smoothLabel.Text = "Smoothness: " .. string.format("%.2f", smoothness)
     end)
 
     -- Вкладка Movement
@@ -405,25 +517,15 @@ local function createMenu()
     movementFrame.BackgroundTransparency = 1
     movementFrame.Visible = false
     movementFrame.Parent = contentFrame
-
-    local toggleBunnyHop = Instance.new("TextButton")
-    toggleBunnyHop.Size = UDim2.new(0.8, 0, 0.2, 0)
-    toggleBunnyHop.Position = UDim2.new(0.1, 0, 0.1, 0)
-    toggleBunnyHop.Text = bunnyHopEnabled and "Вимкнути банни хоп" or "Увімкнути банни хоп"
-    toggleBunnyHop.TextColor3 = Color3.fromRGB(255, 255, 255)
-    toggleBunnyHop.BackgroundColor3 = Color3.fromRGB(50, 50, 70)
-    toggleBunnyHop.BorderColor3 = Color3.fromRGB(150, 50, 200)
-    toggleBunnyHop.TextSize = 12
-    toggleBunnyHop.Font = Enum.Font.SourceSansBold
-    toggleBunnyHop.Parent = movementFrame
-    toggleBunnyHop.MouseButton1Click:Connect(function()
-        bunnyHopEnabled = not bunnyHopEnabled
-        toggleBunnyHop.Text = bunnyHopEnabled and "Вимкнути банни хоп" or "Увімкнути банни хоп"
+    
+    -- Тумблер для Bunny Hop
+    local bunnyToggle = createToggleButton("Bunny Hop", 0, bunnyHopEnabled, function(state)
+        bunnyHopEnabled = state
     end)
 
     UserInputService.InputBegan:Connect(function(input, gameProcessedEvent)
         if gameProcessedEvent then return end
-        if input.KeyCode == Enum.KeyCode.Insert then
+        if input.KeyCode == menuKey then
             frame.Visible = not frame.Visible
         end
     end)
